@@ -1,0 +1,21 @@
+bot_name,interaction_id,audit_date,containment_result,escalation_reason,intent_detected,intent_expected,response_accuracy,fallback_rate,csat_score,dead_air_rate,sentiment,avg_handle_time,greeting_score,resolution_score,empathy_score,clarity_score
+SalesBot,I001,2025-01-10,yes,,check_balance,check_balance,92,5,4.5,2,positive,45,85,90,80,88
+SalesBot,I002,2025-01-10,no,Complex query,apply_loan,check_balance,45,35,2.0,18,negative,120,60,40,50,55
+SalesBot,I003,2025-01-11,yes,,reset_password,reset_password,88,8,4.0,3,positive,52,80,85,75,82
+SalesBot,I004,2025-01-11,no,Bot loop,check_balance,check_balance,55,42,2.5,25,negative,95,65,45,55,60
+SalesBot,I005,2025-01-12,yes,,apply_loan,apply_loan,78,12,3.8,5,neutral,68,75,80,70,76
+SalesBot,I006,2025-01-12,no,Language barrier,reset_password,update_profile,30,55,1.5,30,negative,140,40,35,45,38
+SalesBot,I007,2025-01-13,yes,,update_profile,update_profile,85,6,4.2,4,positive,58,82,88,78,84
+SalesBot,I008,2025-01-13,no,Emotional customer,pay_bill,pay_bill,70,20,3.0,15,negative,88,68,70,60,65
+SalesBot,I009,2025-01-14,yes,,check_balance,check_balance,90,4,4.8,2,positive,42,88,92,82,90
+SalesBot,I010,2025-01-14,no,Complex query,apply_loan,apply_loan,60,28,2.8,12,neutral,110,65,55,60,62
+SupportBot,I011,2025-01-10,yes,,track_order,track_order,94,3,4.7,1,positive,38,90,95,85,92
+SupportBot,I012,2025-01-10,no,Need human empathy,complaint,complaint,42,38,1.8,22,negative,130,55,40,48,50
+SupportBot,I013,2025-01-11,yes,,refund_request,refund_request,82,10,4.1,6,neutral,65,78,84,72,80
+SupportBot,I014,2025-01-11,no,Policy exception,cancel_order,track_order,35,48,2.2,28,negative,145,45,38,42,40
+SupportBot,I015,2025-01-12,yes,,track_order,track_order,91,5,4.6,2,positive,40,88,93,83,90
+SupportBot,I016,2025-01-12,yes,,refund_request,refund_request,80,11,3.9,7,positive,70,76,82,70,78
+SupportBot,I017,2025-01-13,no,Bot loop,complaint,refund_request,38,52,2.0,35,negative,160,42,35,40,38
+SupportBot,I018,2025-01-13,yes,,cancel_order,cancel_order,86,8,4.3,4,neutral,55,82,88,76,84
+SupportBot,I019,2025-01-14,no,Complex policy,refund_request,refund_request,62,25,3.2,14,neutral,105,66,58,62,64
+SupportBot,I020,2025-01-14,yes,,track_order,track_order,93,4,4.7,2,positive,42,90,94,84,91

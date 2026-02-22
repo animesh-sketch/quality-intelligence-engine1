@@ -269,3 +269,67 @@ A 4-week coaching plan:
 3 bullet points a manager should know about this agent when planning team activities, call assignments, or escalation handling.
 """
     return _call_claude(prompt, 1800)
+
+# ── 6. Voicebot Audit Prompt ──────────────────────────────────────────────────
+def analyse_voicebot(summary: dict) -> str:
+    kpis = summary.get("kpis", {})
+    prompt = f"""
+You are a senior Conversational AI Quality Analyst reviewing voicebot performance data.
+
+VOICEBOT KPIs:
+Total Interactions: {summary.get("total_interactions", 0)}
+Containment Rate: {kpis.get("containment_rate", "N/A")}% (Target: {kpis.get("containment_target", 70)}%)
+Escalation Rate: {kpis.get("escalation_rate", "N/A")}%
+Fallback Rate: {kpis.get("fallback_rate", "N/A")}%
+Intent Accuracy: {kpis.get("intent_accuracy", "N/A")}%
+Response Accuracy: {kpis.get("response_accuracy", "N/A")}%
+CSAT Score: {kpis.get("csat_score", "N/A")} / 5
+Dead Air Rate: {kpis.get("dead_air_rate", "N/A")}%
+Avg Handle Time: {kpis.get("avg_handle_time", "N/A")}s
+
+Intent Performance by Intent Type:
+{summary.get("intent_data", "Not available")}
+
+Escalation Reasons (why users drop out to human):
+{summary.get("escalation_data", "Not available")}
+
+Failure Patterns (parameters scoring below 70):
+{summary.get("failure_patterns", "Not available")}
+
+Bot Performance Comparison:
+{summary.get("bot_performance", "Not available")}
+
+Sentiment Distribution:
+{summary.get("sentiment", "Not available")}
+
+Produce a structured voicebot analysis report with these EXACT sections:
+
+## 1. PERFORMANCE VERDICT
+Is this voicebot performing well? What is the overall health score? What are the 3 biggest wins and 3 biggest risks?
+
+## 2. CONTAINMENT ANALYSIS
+Why are users escalating to human agents? What intents/flows are failing containment? What is the business cost of current escalation rate?
+
+## 3. INTENT & NLU ANALYSIS
+Which intents are being misunderstood? What are the likely causes (training data gaps, similar intent confusion, out-of-scope queries)? Which intents need urgent retraining?
+
+## 4. CONVERSATION FLOW FAILURES
+Where in the conversation are users dropping off or getting stuck? What design improvements would reduce fallback rates?
+
+## 5. OPTIMISATION ROADMAP
+Priority-ranked list of improvements:
+- Quick wins (fix in 1 week, high impact)
+- Short term (1 month, NLU retraining, flow redesign)
+- Long term (2-3 months, architectural changes)
+For each: expected improvement in containment rate, CSAT, or intent accuracy.
+
+## 6. EXECUTIVE SUMMARY
+5 sentences for a VP / Head of CX:
+- Current bot performance vs industry benchmark
+- Biggest risk to customer experience
+- ROI opportunity if top issues are fixed
+- Recommended immediate action
+- Timeline to meaningful improvement
+"""
+    return _call_claude(prompt, 2500)
+

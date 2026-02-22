@@ -238,3 +238,97 @@ def render_chart(fig: go.Figure, key: str = None):
     if fig and fig.data:
         st.plotly_chart(fig, use_container_width=True, key=key,
                         config={"displayModeBar": False})
+
+
+# ── Voicebot Charts ───────────────────────────────────────────────────────────
+
+def voicebot_kpi_gauge(value: float, target: float, title: str, unit: str = "%") -> go.Figure:
+    """Gauge chart for a single KPI vs target."""
+    color = GREEN if value >= target else (AMBER if value >= target * 0.8 else RED)
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=value,
+        delta={"reference": target, "valueformat": ".1f",
+               "increasing": {"color": GREEN}, "decreasing": {"color": RED}},
+        number={"suffix": unit, "font": {"color": TEXT, "size": 28}},
+        gauge={
+            "axis": {"range": [0, 100 if unit == "%" else target * 1.5],
+                     "tickcolor": TEXT, "tickfont": {"color": TEXT}},
+            "bar":  {"color": color},
+            "bgcolor": BG_CARD,
+            "bordercolor": GRID,
+            "steps": [
+                {"range": [0, target * 0.8],        "color": "#1a0a0a"},
+                {"range": [target * 0.8, target],    "color": "#1a1500"},
+                {"range": [target, 100 if unit == "%" else target * 1.5], "color": "#0a1a0a"},
+            ],
+            "threshold": {"line": {"color": AMBER, "width": 2}, "value": target},
+        },
+        title={"text": title, "font": {"color": TEXT, "size": 13}},
+    ))
+    fig.update_layout(paper_bgcolor=BG_CARD, font=dict(color=TEXT),
+                      height=220, margin=dict(l=20, r=20, t=50, b=10))
+    return fig
+
+
+def voicebot_intent_chart(intent_df) -> go.Figure:
+    """Bar chart of intent accuracy by intent type."""
+    if intent_df.empty:
+        return go.Figure()
+    df = intent_df.sort_values("accuracy_%")
+    colors = [RED if v < 70 else AMBER if v < 85 else GREEN for v in df["accuracy_%"]]
+    fig = go.Figure(go.Bar(
+        x=df["accuracy_%"], y=df["intent"],
+        orientation="h", marker_color=colors,
+        text=[f"{v:.1f}%" for v in df["accuracy_%"]],
+        textposition="outside", textfont=dict(color=TEXT),
+    ))
+    fig.add_vline(x=85, line_dash="dot", line_color=AMBER,
+                  annotation_text="Target 85%", annotation_font_color=AMBER)
+    fig.update_layout(**LAYOUT_BASE,
+                      title=dict(text="Intent Recognition Accuracy", font=dict(color=TEXT, size=14)),
+                      height=max(280, len(df) * 38),
+                      xaxis=dict(range=[0, 115], gridcolor=GRID))
+    return fig
+
+
+def voicebot_escalation_chart(escal_df) -> go.Figure:
+    """Pie chart of escalation reasons."""
+    if escal_df.empty:
+        return go.Figure()
+    palette = [RED, AMBER, PURPLE, BLUE, GREEN, "#06b6d4", "#f43f5e"]
+    fig = go.Figure(go.Pie(
+        labels=escal_df["escalation_reason"],
+        values=escal_df["count"],
+        hole=0.5,
+        marker_colors=palette[:len(escal_df)],
+        textfont=dict(color="white", size=11),
+    ))
+    fig.update_layout(
+        paper_bgcolor=BG_CARD, font=dict(color=TEXT),
+        title=dict(text="Escalation Reasons", font=dict(color=TEXT, size=14)),
+        legend=dict(font=dict(color=TEXT), bgcolor=BG_CARD),
+        height=320, margin=dict(l=20, r=20, t=50, b=20),
+    )
+    return fig
+
+
+def voicebot_failure_chart(failures_df) -> go.Figure:
+    """Bar chart of failure rates by parameter."""
+    if failures_df.empty:
+        return go.Figure()
+    df = failures_df.sort_values("fail_rate_%", ascending=False).head(10)
+    colors = [RED if s == "HIGH" else AMBER if s == "MEDIUM" else GREEN
+              for s in df["severity"]]
+    fig = go.Figure(go.Bar(
+        x=df["parameter"], y=df["fail_rate_%"],
+        marker_color=colors,
+        text=[f"{v:.1f}%" for v in df["fail_rate_%"]],
+        textposition="outside", textfont=dict(color=TEXT),
+    ))
+    fig.add_hline(y=25, line_dash="dot", line_color=AMBER)
+    fig.update_layout(**LAYOUT_BASE,
+                      title=dict(text="Failure Rate by Parameter", font=dict(color=TEXT, size=14)),
+                      height=340)
+    return fig
+

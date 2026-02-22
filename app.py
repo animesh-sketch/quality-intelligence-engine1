@@ -15,10 +15,14 @@ from calibration_module import validate_csv as cal_val, build_calibration_summar
 from ata_module      import validate_csv as ata_val, build_ata_summary
 from redflag_module  import DEFAULT_FLAGS, parse_custom_rules, scan_transcript, build_redflag_summary
 from scorecard_module import build_agent_profile, generate_scorecard_pdf, get_agent_list
+from voicebot_module import validate_csv as vb_val, build_voicebot_summary
 from viz_module      import (score_bar_chart, agent_radar_chart, trend_line_chart,
                               agent_league_table_chart, variance_heatmap,
-                              auditor_accuracy_chart, flag_severity_donut, render_chart)
+                              auditor_accuracy_chart, flag_severity_donut, render_chart,
+                              voicebot_kpi_gauge, voicebot_intent_chart,
+                              voicebot_escalation_chart, voicebot_failure_chart)
 from ai_engine       import (analyse_tni, analyse_calibration, analyse_red_flags,
+                              analyse_voicebot,
                               generate_agent_scorecard, analyse_ata)
 
 st.set_page_config(page_title="Quality Intelligence Engine", page_icon="🧠",
@@ -67,7 +71,8 @@ with st.sidebar:
     </div>""", unsafe_allow_html=True)
     st.divider()
     PAGE = st.radio("nav", ["🏠  Dashboard", "📂  Audit Sheet Analysis",
-                             "🚨  Transcript Scanner", "🎯  Agent Scorecards"],
+                             "🚨  Transcript Scanner", "🎯  Agent Scorecards",
+                             "🤖  Voicebot Audit"],
                     label_visibility="collapsed")
     st.divider()
     st.markdown("""<div style="font-size:0.7rem;color:#1e3a5f;padding:6px 4px;line-height:1.9;">
@@ -433,6 +438,202 @@ def page_scorecards():
                 mime="application/zip", use_container_width=True)
     sec("👥 Team Overview")
     render_chart(agent_league_table_chart(compute_agent_stats(df)), "league2")
+
+
+
+# PAGE: VOICEBOT AUDIT
+def page_voicebot():
+    st.markdown(
+        "<h2 style='color:#e2e8f0;margin-bottom:2px;'>🤖 Voicebot Audit</h2>"
+        "<p style='color:#475569;font-size:0.9rem;'>Upload your voicebot audit dump — AI analyses containment, intent accuracy, failures and more</p>",
+        unsafe_allow_html=True
+    )
+
+    with st.expander("📋 How to prepare your Voicebot Audit CSV", expanded=False):
+        st.markdown("""
+        Your CSV needs at minimum: **bot_name** and **interaction_id**
+
+        Add any columns you have from this list — the engine uses whatever is available:
+
+        | Column | What it means |
+        |---|---|
+        | `containment_result` | yes/no — did bot resolve without human? |
+        | `escalation_reason` | why user was transferred to human |
+        | `intent_detected` | what the bot thought user wanted |
+        | `intent_expected` | what user actually wanted |
+        | `intent_accuracy` | % correct intent (0-100) |
+        | `response_accuracy` | % correct responses (0-100) |
+        | `fallback_rate` | % of utterances bot couldn't handle |
+        | `csat_score` | customer satisfaction (0-5) |
+        | `dead_air_rate` | % of call with silence |
+        | `avg_handle_time` | average call duration (seconds) |
+        | `sentiment` | positive/neutral/negative |
+        | Any score column | e.g. greeting_score, resolution_score |
+        """)
+        eg = pd.DataFrame({
+            "bot_name":          ["SalesBot","SalesBot","SupportBot"],
+            "interaction_id":    ["I001","I002","I003"],
+            "containment_result":["yes","no","yes"],
+            "escalation_reason": [None,"Complex query",None],
+            "intent_detected":   ["check_balance","apply_loan","reset_password"],
+            "intent_expected":   ["check_balance","check_balance","reset_password"],
+            "csat_score":        [4.5, 2.0, 4.0],
+            "response_accuracy": [92, 55, 88],
+        })
+        st.dataframe(eg, use_container_width=True, hide_index=True)
+
+    uploaded = st.file_uploader("Upload Voicebot Audit CSV", type=["csv"], key="vb_up")
+    if not uploaded:
+        st.info("Upload your voicebot audit dump CSV to begin.")
+        return
+
+    raw_df = load_csv(uploaded)
+    if raw_df is None:
+        return
+
+    # Auto-normalise columns
+    raw_df.columns = (raw_df.columns.str.strip().str.lower()
+                      .str.replace(r"[\s\-/\\]+", "_", regex=True)
+                      .str.replace(r"[^\w]", "", regex=True))
+
+    ok, err = vb_val(raw_df)
+    if not ok:
+        st.error(f"CSV issue: {err}")
+        return
+
+    st.success(f"✅ {len(raw_df):,} interactions loaded")
+
+    with st.expander("Preview data", expanded=False):
+        st.dataframe(raw_df.head(10), use_container_width=True, hide_index=True)
+
+    with st.spinner("Analysing voicebot performance..."):
+        summary   = build_voicebot_summary(raw_df)
+        kpis      = summary["_kpis"]
+        intent_df = summary["_intent_df"]
+        escal_df  = summary["_escal_df"]
+        fail_df   = summary["_failures_df"]
+        bot_df    = summary["_bot_perf_df"]
+        sentiment = summary["_sentiment"]
+
+    # ── KPI Cards ──────────────────────────────────────────────────────────────
+    kpi_items = []
+    cols5 = st.columns(5)
+
+    containment = kpis.get("containment_rate")
+    escalation  = kpis.get("escalation_rate")
+    intent_acc  = kpis.get("intent_accuracy")
+    csat        = kpis.get("csat_score")
+    fallback    = kpis.get("fallback_rate")
+
+    if containment is not None:
+        kpi_items.append((cols5[0], f"{containment}%",
+                         "#10b981" if containment >= 70 else "#ef4444", "Containment Rate"))
+    if escalation is not None:
+        kpi_items.append((cols5[1], f"{escalation}%",
+                         "#ef4444" if escalation > 30 else "#10b981", "Escalation Rate"))
+    if intent_acc is not None:
+        kpi_items.append((cols5[2], f"{intent_acc}%",
+                         "#10b981" if intent_acc >= 85 else "#f59e0b", "Intent Accuracy"))
+    if csat is not None:
+        kpi_items.append((cols5[3], f"{csat}/5",
+                         "#10b981" if csat >= 3.5 else "#ef4444", "CSAT Score"))
+    if fallback is not None:
+        kpi_items.append((cols5[4], f"{fallback}%",
+                         "#ef4444" if fallback > 20 else "#10b981", "Fallback Rate"))
+
+    if kpi_items:
+        mcard(kpi_items[:5])
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Gauge Row ──────────────────────────────────────────────────────────────
+    gauge_items = []
+    if containment is not None: gauge_items.append(("containment_rate", 70, "Containment Rate", "%"))
+    if intent_acc  is not None: gauge_items.append(("intent_accuracy",  85, "Intent Accuracy",  "%"))
+    if csat        is not None: gauge_items.append(("csat_score",       3.5,"CSAT Score",        "/5"))
+
+    if gauge_items:
+        sec("📊 Key Performance Gauges")
+        gcols = st.columns(len(gauge_items))
+        for i, (key, target, label, unit) in enumerate(gauge_items):
+            val = kpis.get(key, 0)
+            with gcols[i]:
+                render_chart(voicebot_kpi_gauge(val, target, label, unit), f"gauge_{i}")
+
+    # ── Intent Analysis ────────────────────────────────────────────────────────
+    if not intent_df.empty:
+        sec("🧠 Intent Recognition Analysis", "amber")
+        cl, cr = st.columns([3,2])
+        with cl:
+            render_chart(voicebot_intent_chart(intent_df), "intent_chart")
+        with cr:
+            st.dataframe(intent_df.style.background_gradient(subset=["accuracy_%"], cmap="RdYlGn"),
+                         use_container_width=True, hide_index=True)
+
+    # ── Escalation ────────────────────────────────────────────────────────────
+    if not escal_df.empty:
+        sec("📞 Escalation Analysis", "red")
+        cl, cr = st.columns([2,3])
+        with cl:
+            render_chart(voicebot_escalation_chart(escal_df), "escal_chart")
+        with cr:
+            st.dataframe(escal_df, use_container_width=True, hide_index=True)
+
+    # ── Failure Patterns ──────────────────────────────────────────────────────
+    if not fail_df.empty:
+        sec("⚠️ Failure Patterns", "amber")
+        render_chart(voicebot_failure_chart(fail_df), "fail_chart")
+        st.dataframe(fail_df, use_container_width=True, hide_index=True)
+
+    # ── Bot Performance Comparison ────────────────────────────────────────────
+    if not bot_df.empty and len(bot_df) > 1:
+        sec("🤖 Bot Performance Comparison")
+        st.dataframe(
+            bot_df.style.background_gradient(subset=["overall_score"], cmap="RdYlGn"),
+            use_container_width=True, hide_index=True
+        )
+
+    # ── Sentiment ─────────────────────────────────────────────────────────────
+    if sentiment:
+        sec("😊 Sentiment Distribution")
+        scols = st.columns(len(sentiment))
+        sentiment_colors = {"positive":"#10b981","neutral":"#3b82f6","negative":"#ef4444"}
+        for i, (label, count) in enumerate(sentiment.items()):
+            pct = round(count / len(raw_df) * 100, 1)
+            ac  = sentiment_colors.get(label.lower(), "#8b5cf6")
+            with scols[i]:
+                st.markdown(f'<div class="qie-card" style="--ac:{ac};"><div class="v">{pct}%</div><div class="l">{label.title()}</div></div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Additional KPI Details ────────────────────────────────────────────────
+    extra_kpis = {k: v for k, v in kpis.items()
+                  if k not in {"containment_rate","escalation_rate","intent_accuracy",
+                                "csat_score","fallback_rate","containment_target",
+                                "containment_status","csat_target","silence_warning"}
+                  and not isinstance(v, str)}
+    if extra_kpis:
+        with st.expander("📋 All KPI Details", expanded=False):
+            kpi_df = pd.DataFrame(list(extra_kpis.items()), columns=["Metric","Value"])
+            st.dataframe(kpi_df, use_container_width=True, hide_index=True)
+
+    # ── AI Analysis ───────────────────────────────────────────────────────────
+    sec("🤖 Claude AI — Voicebot Intelligence Report", "purple")
+    if st.button("🚀 Generate AI Voicebot Analysis", key="vb_ai_btn"):
+        with st.spinner("Claude analysing voicebot performance data...  ~25 seconds"):
+            try:
+                result = analyse_voicebot(summary)
+                st.session_state["vb_ai"] = result
+            except Exception as e:
+                st.error(str(e))
+
+    if "vb_ai" in st.session_state:
+        r = st.session_state["vb_ai"]
+        with st.expander("🏆 Performance Verdict",       expanded=True):  ai_section(r, "PERFORMANCE VERDICT")
+        with st.expander("📞 Containment Analysis",      expanded=False): ai_section(r, "CONTAINMENT ANALYSIS")
+        with st.expander("🧠 Intent & NLU Analysis",     expanded=False): ai_section(r, "INTENT")
+        with st.expander("🔁 Conversation Flow Failures",expanded=False): ai_section(r, "CONVERSATION FLOW")
+        with st.expander("🗺️ Optimisation Roadmap",      expanded=False): ai_section(r, "OPTIMISATION")
+        with st.expander("📧 Executive Summary",          expanded=False): ai_section(r, "EXECUTIVE SUMMARY")
+        with st.expander("📄 Full Report",                expanded=False): ai_box(r)
 
 # ── Router ────────────────────────────────────────────────────────────────────
 if   PAGE == "🏠  Dashboard":            page_dashboard()
