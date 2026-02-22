@@ -1,193 +1,271 @@
 # ============================================================
-# ai_engine.py  —  Quality Intelligence Engine
-# Handles all Claude API communication.
-# All prompts are structured and templated here.
+# ai_engine.py  —  Quality Intelligence Engine v2
+# Central AI hub. All Claude API calls live here.
 # ============================================================
 
 import os
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv()  # reads ANTHROPIC_API_KEY from .env file
+load_dotenv()
 
 
-def _get_client() -> anthropic.Anthropic:
-    """Initialise and return Anthropic client. Raises clear error if key missing."""
+def _get_client():
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise EnvironmentError(
-            "ANTHROPIC_API_KEY not found. "
-            "Create a .env file in the project folder and add:\n"
-            "ANTHROPIC_API_KEY=sk-ant-..."
+            "ANTHROPIC_API_KEY not found.\n"
+            "Create a .env file and add: ANTHROPIC_API_KEY=sk-ant-..."
         )
     return anthropic.Anthropic(api_key=api_key)
 
 
-def _call_claude(prompt: str, max_tokens: int = 1800) -> str:
-    """
-    Send a prompt to Claude and return the text response.
-    Wraps API errors with user-friendly messages.
-    """
+def _call_claude(prompt: str, max_tokens: int = 2000) -> str:
     client = _get_client()
     try:
-        message = client.messages.create(
+        msg = client.messages.create(
             model="claude-opus-4-6",
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
-        return message.content[0].text
+        return msg.content[0].text
     except anthropic.AuthenticationError:
-        raise ValueError("Invalid API key. Please check your ANTHROPIC_API_KEY in .env")
+        raise ValueError("Invalid API key. Check ANTHROPIC_API_KEY in your .env file.")
     except anthropic.RateLimitError:
-        raise ValueError("Rate limit hit. Please wait a moment and try again.")
+        raise ValueError("Rate limit reached. Wait a moment and try again.")
     except anthropic.APIError as e:
-        raise ValueError(f"Claude API error: {str(e)}")
+        raise ValueError(f"Claude API error: {e}")
 
 
-# ── TNI Prompt ──────────────────────────────────────────────────────────────
+# ── 1. TNI Prompt ─────────────────────────────────────────────────────────────
+def analyse_tni(summary: dict) -> str:
+    prompt = f"""
+You are a senior Learning & Development analyst for a call centre operation.
 
-TNI_PROMPT_TEMPLATE = """
-You are a senior Learning & Development analyst specialising in call centre quality.
+TNI DATA:
+Weak Parameters (avg score < 70):
+{summary.get('weak_params', 'None')}
 
-You have received the following Training Needs Identification (TNI) data from a QA audit system:
+Recurring Weaknesses (3+ failures per agent):
+{summary.get('recurring', 'None')}
 
---- TNI DATA ---
-{tni_data}
----
+Score Trend:
+{summary.get('trend_data', 'Not available')}
 
-Based on this data, produce a structured analysis with EXACTLY these sections:
+Agent Statistics:
+{summary.get('agent_stats', 'Not available')}
+
+Parameter Averages:
+{summary.get('param_averages', 'Not available')}
+
+Produce a structured report with these EXACT sections:
 
 ## 1. ROOT CAUSE ANALYSIS
-Identify the likely root causes behind each weak parameter. Be specific — mention whether the cause is likely knowledge gap, process gap, motivation/attitude issue, or system/tool issue.
+For each weak parameter, identify if the cause is: knowledge gap, process gap, attitude/motivation, or tool/system issue. Be specific.
 
 ## 2. SKILL GAP SUMMARY
-List the specific skills agents are missing. Group them by category (Communication, Product Knowledge, Compliance, Soft Skills, etc.).
+List missing skills grouped by category: Communication, Product Knowledge, Compliance, Soft Skills.
 
 ## 3. PRIORITY MATRIX
-Rank the top 5 training priorities from CRITICAL to LOW. Format as:
-| Priority | Parameter | Impact | Urgency |
+| Priority Level | Parameter | Business Impact | Urgency |
+Top 5 priorities ranked CRITICAL to LOW.
 
 ## 4. TRAINING RECOMMENDATIONS
-For each priority area, recommend:
-- Training format (role-play / e-learning / classroom / coaching)
-- Duration
-- Who should attend (all agents / specific cohort)
-- Expected outcome
+For each priority: format (roleplay/e-learning/classroom/coaching), duration, who attends, expected outcome.
 
 ## 5. COACHING SCRIPT
-Write a ready-to-use coaching conversation script a Team Leader can use with an underperforming agent. Include:
-- Opening (empathetic, non-threatening)
-- Observation statement (what was noticed)
+A ready-to-use script a Team Leader can use RIGHT NOW with an underperforming agent:
+- Empathetic opening
+- Observation statement (what was seen)
 - Impact statement (why it matters)
-- Question to draw out agent's self-reflection
-- Suggested improvement technique
+- Reflective question for the agent
+- One improvement technique
 - Commitment close
 
-Keep the tone professional, actionable, and data-driven. Do not add disclaimers or generic advice.
+Be specific, actionable, and data-driven.
 """
+    return _call_claude(prompt, 2200)
 
 
-def analyse_tni(tni_summary: dict) -> str:
-    """
-    Send TNI summary data to Claude and return structured analysis.
+# ── 2. Calibration Prompt ─────────────────────────────────────────────────────
+def analyse_calibration(summary: dict) -> str:
+    prompt = f"""
+You are a senior QA Calibration specialist for a call centre.
 
-    Parameters
-    ----------
-    tni_summary : dict  —  keys: weak_params, recurring, trend_data, agent_stats
-    """
-    data_block = f"""
-Weak Parameters (score < 70):
-{tni_summary.get('weak_params', 'None identified')}
+CALIBRATION DATA:
+Parameters with Variance > 15%:
+{summary.get('variance_data', 'None')}
 
-Recurring Weaknesses (3+ occurrences across agents):
-{tni_summary.get('recurring', 'None identified')}
+Strict Auditors (scoring below team average):
+{summary.get('strict_auditors', 'None')}
 
-Score Trend (recent direction):
-{tni_summary.get('trend_data', 'Not available')}
+Lenient Auditors (scoring above team average):
+{summary.get('lenient_auditors', 'None')}
 
-Agent-Level Statistics:
-{tni_summary.get('agent_stats', 'Not available')}
+Most Disputed Parameters:
+{summary.get('disputed_params', 'None')}
 
-Team Average Scores by Parameter:
-{tni_summary.get('param_averages', 'Not available')}
-"""
-    prompt = TNI_PROMPT_TEMPLATE.format(tni_data=data_block)
-    return _call_claude(prompt, max_tokens=2000)
+Auditor Statistics:
+{summary.get('auditor_stats', 'Not available')}
 
+Overall Calibration Health:
+{summary.get('overall_score', 'Not available')}
 
-# ── Calibration Prompt ───────────────────────────────────────────────────────
-
-CALIBRATION_PROMPT_TEMPLATE = """
-You are a senior Quality Assurance Calibration expert for a call centre operation.
-
-You have received the following calibration analysis data:
-
---- CALIBRATION DATA ---
-{calibration_data}
----
-
-Produce a structured calibration review with EXACTLY these sections:
+Produce a structured calibration report with these EXACT sections:
 
 ## 1. CALIBRATION SUMMARY
-Summarise the overall calibration health. State clearly: Is the team calibrated? What is the overall variance level? Which parameters are most at risk?
+Is the team calibrated? Overall variance level? Which parameters are most at risk?
 
 ## 2. AUDITOR BIAS ANALYSIS
-For each auditor flagged as strict or lenient:
-- Name the auditor
-- State their bias direction (strict / lenient)
-- Quantify the deviation (e.g., "scores 12% below team average on Greeting")
-- Explain the likely impact on agent morale and data integrity
+For each biased auditor: name, direction (strict/lenient), deviation amount, impact on data integrity.
 
 ## 3. PARAMETER DISAGREEMENT ANALYSIS
-For each parameter with high variance:
-- Explain WHY auditors likely disagree (ambiguous definition, subjectivity, missing examples)
-- Give a concrete example of what a "3" vs "5" looks like for that parameter
+For each disputed parameter: why auditors likely disagree, what a low vs high score looks like.
 
 ## 4. GUIDELINE IMPROVEMENT SUGGESTIONS
-For the top 3 most disputed parameters, write improved scoring guidelines:
-- Clear behavioural anchors for each score level (1, 3, 5)
-- Mandatory examples (positive and negative)
-- Common mistakes auditors make when scoring this parameter
+For the top 3 disputed parameters, write improved scoring guidelines with:
+- Behavioural anchors for score 1, 3, and 5
+- One positive example and one negative example
+- Common auditor mistakes for this parameter
 
 ## 5. EXECUTIVE SUMMARY
-Write a 5-sentence executive summary suitable for a VP / Head of Quality. Include:
+5 sentences for a VP/Head of Quality:
 - Current calibration status
-- Biggest risk
+- Biggest risk right now
 - Recommended immediate action
-- Expected business impact if not fixed
-- Timeline for resolution
-
-Use precise, data-driven language. No generic advice.
+- Business impact if not fixed
+- Suggested resolution timeline
 """
+    return _call_claude(prompt, 2200)
 
 
-def analyse_calibration(calibration_summary: dict) -> str:
-    """
-    Send calibration data to Claude and return structured analysis.
+# ── 3. Red Flag Prompt ────────────────────────────────────────────────────────
+def analyse_red_flags(summary: dict) -> str:
+    prompt = f"""
+You are a senior Quality Compliance Analyst reviewing call centre red flag violations.
 
-    Parameters
-    ----------
-    calibration_summary : dict  —  keys: variance_data, strict_auditors,
-                                    lenient_auditors, disputed_params, auditor_stats
-    """
-    data_block = f"""
-Parameters with Variance > 15%:
-{calibration_summary.get('variance_data', 'None detected')}
+RED FLAG DATA:
+Total Transcripts Scanned: {summary.get('total_transcripts', 0)}
+Total Flags Detected: {summary.get('total_flags', 0)}
+HIGH Severity Flags: {summary.get('high_count', 0)}
+MEDIUM Severity Flags: {summary.get('medium_count', 0)}
+LOW Severity Flags: {summary.get('low_count', 0)}
 
-Strict Auditors (consistently below team average):
-{calibration_summary.get('strict_auditors', 'None detected')}
+Top Flagged Agents:
+{summary.get('top_agents', 'None')}
 
-Lenient Auditors (consistently above team average):
-{calibration_summary.get('lenient_auditors', 'None detected')}
+Most Common Flag Types:
+{summary.get('top_flags', 'None')}
 
-Most Disputed Parameters (highest inter-rater disagreement):
-{calibration_summary.get('disputed_params', 'None detected')}
+Detailed Flag List:
+{summary.get('flag_details', 'None')}
 
-Auditor-Level Statistics:
-{calibration_summary.get('auditor_stats', 'Not available')}
+Produce a structured compliance report with these EXACT sections:
 
-Overall Team Calibration Score:
-{calibration_summary.get('overall_score', 'Not available')}
+## 1. COMPLIANCE RISK ASSESSMENT
+Overall risk level (Critical/High/Medium/Low). Which violations pose the biggest brand and legal risk?
+
+## 2. AGENT RISK PROFILES
+For each flagged agent: risk level, pattern of behaviour, recommended action (verbal warning / written warning / PIP / termination).
+
+## 3. VIOLATION PATTERN ANALYSIS
+What patterns emerge? Are violations isolated incidents or systemic? Are certain shifts/teams more affected?
+
+## 4. IMMEDIATE ACTION PLAN
+Specific actions to take in the next 24 hours, next 7 days, and next 30 days.
+
+## 5. PREVENTION RECOMMENDATIONS
+Process changes, script updates, or monitoring improvements to prevent recurrence.
 """
-    prompt = CALIBRATION_PROMPT_TEMPLATE.format(calibration_data=data_block)
-    return _call_claude(prompt, max_tokens=2000)
+    return _call_claude(prompt, 2000)
+
+
+# ── 4. ATA Prompt ────────────────────────────────────────────────────────────
+def analyse_ata(summary: dict) -> str:
+    prompt = f"""
+You are a Master Quality Auditor reviewing how accurately your QA auditors are scoring agents.
+
+ATA DATA:
+Overall ATA Health: {summary.get('overall_score', 'N/A')}
+Total Auditors Reviewed: {summary.get('auditor_count', 0)}
+
+Auditor Accuracy vs Master Scores:
+{summary.get('accuracy_data', 'None')}
+
+Parameter-Level Gaps (where auditors drift from master):
+{summary.get('param_gaps', 'None')}
+
+Missed Flags (auditor scored higher than master by 15+ points):
+{summary.get('missed_flags', 'None')}
+
+Produce a structured ATA report with these EXACT sections:
+
+## 1. OVERALL ATA VERDICT
+Is your QA team accurately auditing? What is the trust level in current audit data?
+
+## 2. AUDITOR PERFORMANCE RANKING
+Rank each auditor from most to least accurate. For each:
+- Accuracy score
+- Their biggest blind spot (parameter they consistently get wrong)
+- Recommended action (no action / coaching / re-certification / reassignment)
+
+## 3. MISSED FLAGS ANALYSIS
+For every missed flag: what did the auditor miss, what's the risk, and what should have been scored?
+
+## 4. PARAMETER BLIND SPOTS
+Which parameters do auditors collectively misunderstand? Why? What does the correct scoring look like?
+
+## 5. CORRECTIVE ACTION PLAN
+- Immediate actions (this week)
+- Short term (this month): re-calibration sessions, parameter guideline updates
+- Long term: process changes to prevent recurrence
+- Which auditors need re-certification before being allowed to audit again?
+"""
+    return _call_claude(prompt, 2000)
+
+
+# ── 5. Agent Scorecard Prompt ─────────────────────────────────────────────────
+def generate_agent_scorecard(agent_data: dict) -> str:
+    prompt = f"""
+You are a call centre performance coach generating a personalised agent report.
+
+AGENT PROFILE:
+Name: {agent_data.get('name', 'Unknown')}
+Total Audits: {agent_data.get('total_audits', 0)}
+Overall Average Score: {agent_data.get('overall_avg', 'N/A')}
+
+Parameter Scores:
+{agent_data.get('param_scores', 'Not available')}
+
+Strongest Parameters:
+{agent_data.get('strengths', 'None identified')}
+
+Weakest Parameters:
+{agent_data.get('weaknesses', 'None identified')}
+
+Score Trend: {agent_data.get('trend', 'Not available')}
+
+Red Flags Detected: {agent_data.get('red_flags', 0)}
+
+Generate a personalised agent scorecard report with these EXACT sections:
+
+## 1. PERFORMANCE SUMMARY
+Overall rating (Exceeds/Meets/Needs Improvement/Critical). 2-3 sentence narrative about this agent's performance.
+
+## 2. STRENGTHS
+Top 3 things this agent does well. Be specific and encouraging.
+
+## 3. DEVELOPMENT AREAS
+Top 3 areas needing improvement. Be specific, non-judgmental, and actionable.
+
+## 4. PERSONALISED COACHING PLAN
+A 4-week coaching plan:
+- Week 1: Focus area + specific activity
+- Week 2: Focus area + specific activity
+- Week 3: Focus area + specific activity
+- Week 4: Assessment + next steps
+
+## 5. MANAGER NOTES
+3 bullet points a manager should know about this agent when planning team activities, call assignments, or escalation handling.
+"""
+    return _call_claude(prompt, 1800)
