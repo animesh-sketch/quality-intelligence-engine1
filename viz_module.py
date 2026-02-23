@@ -149,10 +149,11 @@ def agent_league_table_chart(agent_df: pd.DataFrame) -> go.Figure:
         textfont=dict(color=TEXT),
     ))
     fig.add_vline(x=70, line_dash="dot", line_color=AMBER)
-    fig.update_layout(**LAYOUT_BASE,
+    layout3 = dict(**LAYOUT_BASE)
+    layout3["xaxis"] = dict(range=[0, 105], gridcolor=GRID)
+    fig.update_layout(**layout3,
                       title=dict(text="Agent League Table", font=dict(color=TEXT, size=14)),
-                      height=max(300, len(df) * 38),
-                      xaxis=dict(range=[0, 105], gridcolor=GRID))
+                      height=max(300, len(df) * 38))
     return fig
 
 
@@ -199,10 +200,11 @@ def auditor_accuracy_chart(accuracy_df: pd.DataFrame) -> go.Figure:
     ))
     fig.add_vline(x=85, line_dash="dot", line_color=AMBER,
                   annotation_text="Target 85%", annotation_font_color=AMBER)
-    fig.update_layout(**LAYOUT_BASE,
+    layout2 = dict(**LAYOUT_BASE)
+    layout2["xaxis"] = dict(range=[0, 110], gridcolor=GRID)
+    fig.update_layout(**layout2,
                       title=dict(text="Auditor Accuracy vs Master", font=dict(color=TEXT, size=14)),
-                      height=max(280, len(df) * 45),
-                      xaxis=dict(range=[0, 110], gridcolor=GRID))
+                      height=max(280, len(df) * 45))
     return fig
 
 
@@ -285,10 +287,11 @@ def voicebot_intent_chart(intent_df) -> go.Figure:
     ))
     fig.add_vline(x=85, line_dash="dot", line_color=AMBER,
                   annotation_text="Target 85%", annotation_font_color=AMBER)
-    fig.update_layout(**LAYOUT_BASE,
+    layout = dict(**LAYOUT_BASE)
+    layout["xaxis"] = dict(range=[0, 115], gridcolor=GRID)
+    fig.update_layout(**layout,
                       title=dict(text="Intent Recognition Accuracy", font=dict(color=TEXT, size=14)),
-                      height=max(280, len(df) * 38),
-                      xaxis=dict(range=[0, 115], gridcolor=GRID))
+                      height=max(280, len(df) * 38))
     return fig
 
 
