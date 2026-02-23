@@ -9,22 +9,22 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 
-# ── Theme colours ─────────────────────────────────────────────────────────────
-BG       = "#070b14"
-BG_CARD  = "#0d1426"
-BLUE     = "#3b82f6"
-GREEN    = "#10b981"
-AMBER    = "#f59e0b"
-RED      = "#ef4444"
-PURPLE   = "#8b5cf6"
-TEXT     = "#c8d5ea"
-GRID     = "#152040"
+# ── Theme colours — Neon Noir Premium ─────────────────────────────────────────
+BG       = "#04070f"
+BG_CARD  = "#080f24"
+BLUE     = "#00f5d4"
+GREEN    = "#06d6a0"
+AMBER    = "#ffd60a"
+RED      = "#f72585"
+PURPLE   = "#b14cf0"
+TEXT     = "#c4d8ff"
+GRID     = "#0f1e3d"
 
 LAYOUT_BASE = dict(
     paper_bgcolor=BG_CARD,
     plot_bgcolor=BG_CARD,
-    font=dict(family="Plus Jakarta Sans, sans-serif", color=TEXT, size=12),
-    margin=dict(l=20, r=20, t=40, b=20),
+    font=dict(family="DM Sans, sans-serif", color=TEXT, size=12),
+    margin=dict(l=20, r=20, t=44, b=20),
     xaxis=dict(gridcolor=GRID, zerolinecolor=GRID),
     yaxis=dict(gridcolor=GRID, zerolinecolor=GRID),
 )

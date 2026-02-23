@@ -9,6 +9,7 @@ import pandas as pd
 import zipfile, io, os
 from datetime import datetime
 
+from file_parser     import parse_file, get_file_type_label
 from smart_detector  import auto_prepare, get_score_columns
 from tni_module      import validate_csv as tni_val, build_tni_summary, compute_agent_stats
 from calibration_module import validate_csv as cal_val, build_calibration_summary
@@ -30,44 +31,396 @@ st.set_page_config(page_title="Quality Intelligence Engine", page_icon="🧠",
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-html,body,[class*="css"]{font-family:'Plus Jakarta Sans',sans-serif;}
-.stApp{background:#070b14;color:#dde3f0;}
-section[data-testid="stSidebar"]{background:linear-gradient(180deg,#0a0f1e,#060a16);border-right:1px solid #0f1e3d;}
-.qie-card{background:linear-gradient(135deg,#0d1426,#111c38);border:1px solid #152040;border-radius:16px;padding:20px 22px;text-align:center;position:relative;overflow:hidden;transition:transform .2s;}
-.qie-card:hover{transform:translateY(-2px);border-color:var(--ac,#3b82f6);}
-.qie-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ac,#3b82f6);}
-.qie-card .v{font-size:2.2rem;font-weight:800;color:var(--ac,#3b82f6);line-height:1;margin-bottom:5px;}
-.qie-card .l{font-size:0.7rem;color:#475569;letter-spacing:.1em;text-transform:uppercase;font-weight:600;}
-.sec{background:linear-gradient(90deg,#0f1e40,#070b14);border-left:3px solid var(--ac,#3b82f6);border-radius:0 10px 10px 0;padding:10px 16px;margin:22px 0 10px;font-size:0.8rem;font-weight:700;color:#7eb8ff;letter-spacing:.1em;text-transform:uppercase;}
-.sec.amber{--ac:#f59e0b;border-left-color:#f59e0b;color:#fcd34d;}
-.sec.red{--ac:#ef4444;border-left-color:#ef4444;color:#fca5a5;}
-.sec.green{--ac:#10b981;border-left-color:#10b981;color:#6ee7b7;}
-.sec.purple{--ac:#8b5cf6;border-left-color:#8b5cf6;color:#c4b5fd;}
-.ai-box{background:#09101f;border:1px solid #152040;border-radius:14px;padding:22px 26px;font-size:0.88rem;line-height:1.8;color:#c8d5ea;}
-.ai-box h2{color:#60a5fa;font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:20px 0 7px;padding-bottom:5px;border-bottom:1px solid #152040;}
-.ai-box h3{color:#93c5fd;font-size:0.88rem;margin:12px 0 4px;}
-.ai-box strong{color:#e2e8f0;}.ai-box ul{padding-left:18px;}.ai-box li{margin-bottom:4px;}
-.flag-row{background:#0d1426;border-left:4px solid var(--ac,#3b82f6);padding:9px 13px;border-radius:0 8px 8px 0;margin:4px 0;font-size:0.84rem;color:#c8d5ea;}
-.flag-row.HIGH{--ac:#ef4444;}.flag-row.MEDIUM{--ac:#f59e0b;}.flag-row.LOW{--ac:#10b981;}
-.badge-HIGH{background:#450a0a;color:#f87171;padding:2px 9px;border-radius:20px;font-size:0.7rem;font-weight:700;border:1px solid #7f1d1d;}
-.badge-MEDIUM{background:#431407;color:#fb923c;padding:2px 9px;border-radius:20px;font-size:0.7rem;font-weight:700;border:1px solid #7c2d12;}
-.badge-LOW{background:#052e16;color:#4ade80;padding:2px 9px;border-radius:20px;font-size:0.7rem;font-weight:700;border:1px solid #14532d;}
-.auto-tag{background:#1a2545;color:#60a5fa;border:1px solid #1e3a8a;border-radius:6px;padding:3px 9px;font-size:0.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;}
-div[data-testid="stButton"]>button{background:linear-gradient(135deg,#1e3a8a,#4338ca)!important;color:white!important;border:none!important;border-radius:10px!important;font-weight:700!important;padding:12px 28px!important;width:100%;transition:opacity .2s;}
-div[data-testid="stButton"]>button:hover{opacity:.85!important;}
-div[data-testid="stFileUploader"]{background:#0d1426;border:1.5px dashed #152040;border-radius:12px;padding:10px;}
-details{background:#0d1426!important;border-radius:12px!important;border:1px solid #152040!important;margin-bottom:8px!important;}
-summary{padding:11px 16px!important;color:#7eb8ff!important;font-weight:600!important;}
-hr{border-color:#0f1e3d!important;}
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Reset & Base ─────────────────────────────────────────── */
+html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif;
+    background: #04070f;
+}
+.stApp {
+    background: #04070f;
+    background-image:
+        radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,245,212,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 110%, rgba(247,37,133,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(114,9,183,0.04) 0%, transparent 70%);
+    min-height: 100vh;
+    color: #dce8ff;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #060c1a 0%, #040810 100%);
+    border-right: 1px solid rgba(0,245,212,0.12);
+}
+section[data-testid="stSidebar"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #00f5d4, #7209b7, #f72585);
+}
+
+/* ── Sidebar nav pills ─────────────────────────────────────── */
+div[data-testid="stRadio"] label {
+    display: flex !important;
+    align-items: center !important;
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    margin: 3px 0 !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    color: #647595 !important;
+    transition: all 0.2s !important;
+    cursor: pointer !important;
+}
+div[data-testid="stRadio"] label:hover {
+    background: rgba(0,245,212,0.07) !important;
+    color: #00f5d4 !important;
+}
+div[data-testid="stRadio"] [aria-checked="true"] + label,
+div[data-testid="stRadio"] label:has(input:checked) {
+    background: linear-gradient(135deg, rgba(0,245,212,0.12), rgba(114,9,183,0.08)) !important;
+    color: #00f5d4 !important;
+    border: 1px solid rgba(0,245,212,0.2) !important;
+}
+
+/* ── KPI Cards ─────────────────────────────────────────────── */
+.qie-card {
+    position: relative;
+    background: rgba(10,18,40,0.85);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 20px;
+    padding: 22px 20px 18px;
+    text-align: center;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+.qie-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--ac, #00f5d4), transparent 60%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    opacity: 0.5;
+}
+.qie-card::after {
+    content: '';
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--ac, #00f5d4) 0%, transparent 70%);
+    opacity: 0.08;
+}
+.qie-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(0,245,212,0.05);
+}
+.qie-card .v {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: var(--ac, #00f5d4);
+    line-height: 1;
+    margin-bottom: 6px;
+    letter-spacing: -0.03em;
+}
+.qie-card .l {
+    font-size: 0.68rem;
+    color: #3d5070;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* ── Section Headers ──────────────────────────────────────── */
+.sec {
+    position: relative;
+    margin: 28px 0 12px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #00f5d4;
+}
+.sec::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(0,245,212,0.3), transparent);
+}
+.sec.amber { color: #ffd60a; }
+.sec.amber::after { background: linear-gradient(90deg, rgba(255,214,10,0.3), transparent); }
+.sec.red   { color: #f72585; }
+.sec.red::after   { background: linear-gradient(90deg, rgba(247,37,133,0.3), transparent); }
+.sec.green { color: #06d6a0; }
+.sec.green::after { background: linear-gradient(90deg, rgba(6,214,160,0.3), transparent); }
+.sec.purple{ color: #b14cf0; }
+.sec.purple::after{ background: linear-gradient(90deg, rgba(177,76,240,0.3), transparent); }
+
+/* ── AI Output Box ─────────────────────────────────────────── */
+.ai-box {
+    background: linear-gradient(135deg, rgba(8,15,35,0.95), rgba(12,20,45,0.9));
+    border: 1px solid rgba(0,245,212,0.12);
+    border-radius: 18px;
+    padding: 26px 30px;
+    font-size: 0.88rem;
+    line-height: 1.85;
+    color: #c4d8ff;
+    position: relative;
+    overflow: hidden;
+}
+.ai-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, #00f5d4, transparent);
+    opacity: 0.5;
+}
+.ai-box h2 {
+    font-family: 'Syne', sans-serif;
+    color: #00f5d4;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin: 22px 0 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(0,245,212,0.1);
+}
+.ai-box h3 { color: #7dd3fc; font-size: 0.9rem; margin: 14px 0 5px; }
+.ai-box strong { color: #f0f7ff; }
+.ai-box ul { padding-left: 20px; }
+.ai-box li { margin-bottom: 5px; }
+
+/* ── Flag Rows ─────────────────────────────────────────────── */
+.flag-row {
+    background: rgba(10,15,30,0.7);
+    border-left: 3px solid var(--ac, #00f5d4);
+    padding: 10px 14px;
+    border-radius: 0 10px 10px 0;
+    margin: 5px 0;
+    font-size: 0.83rem;
+    color: #c4d8ff;
+    backdrop-filter: blur(5px);
+    transition: background 0.2s;
+}
+.flag-row:hover { background: rgba(15,25,50,0.9); }
+.flag-row.HIGH   { --ac: #f72585; }
+.flag-row.MEDIUM { --ac: #ffd60a; }
+.flag-row.LOW    { --ac: #06d6a0; }
+.badge-HIGH   { background: rgba(247,37,133,0.15); color: #f9a8d4; padding: 2px 10px; border-radius: 20px; font-size: 0.68rem; font-weight: 700; border: 1px solid rgba(247,37,133,0.3); }
+.badge-MEDIUM { background: rgba(255,214,10,0.12); color: #fef08a; padding: 2px 10px; border-radius: 20px; font-size: 0.68rem; font-weight: 700; border: 1px solid rgba(255,214,10,0.3); }
+.badge-LOW    { background: rgba(6,214,160,0.12);  color: #6ee7b7; padding: 2px 10px; border-radius: 20px; font-size: 0.68rem; font-weight: 700; border: 1px solid rgba(6,214,160,0.3); }
+
+/* ── Auto-tag ─────────────────────────────────────────────── */
+.auto-tag {
+    background: linear-gradient(135deg, rgba(0,245,212,0.15), rgba(114,9,183,0.1));
+    color: #00f5d4;
+    border: 1px solid rgba(0,245,212,0.25);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Feature Cards (Dashboard) ─────────────────────────────── */
+.feat-card {
+    position: relative;
+    border-radius: 24px;
+    padding: 32px 28px;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: default;
+}
+.feat-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+}
+.feat-card .icon { font-size: 2.4rem; margin-bottom: 14px; display: block; }
+.feat-card .title { font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+.feat-card .desc  { font-size: 0.83rem; line-height: 1.75; opacity: 0.8; }
+.feat-card .list  { font-size: 0.8rem; line-height: 2.1; margin-top: 12px; }
+
+/* ── Buttons ───────────────────────────────────────────────── */
+div[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #00f5d4 0%, #0891b2 50%, #7209b7 100%) !important;
+    color: #04070f !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    font-family: 'Syne', sans-serif !important;
+    font-size: 0.85rem !important;
+    letter-spacing: .04em !important;
+    padding: 13px 28px !important;
+    width: 100% !important;
+    transition: all 0.3s !important;
+    box-shadow: 0 4px 20px rgba(0,245,212,0.2) !important;
+}
+div[data-testid="stButton"] > button:hover {
+    opacity: 0.88 !important;
+    box-shadow: 0 8px 30px rgba(0,245,212,0.35) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Download buttons ─────────────────────────────────────── */
+div[data-testid="stDownloadButton"] > button {
+    background: linear-gradient(135deg, rgba(0,245,212,0.1), rgba(114,9,183,0.1)) !important;
+    color: #00f5d4 !important;
+    border: 1px solid rgba(0,245,212,0.3) !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    padding: 12px 24px !important;
+    width: 100% !important;
+}
+div[data-testid="stDownloadButton"] > button:hover {
+    background: rgba(0,245,212,0.15) !important;
+    border-color: rgba(0,245,212,0.5) !important;
+}
+
+/* ── File uploader ─────────────────────────────────────────── */
+div[data-testid="stFileUploader"] {
+    background: rgba(8,15,35,0.6);
+    border: 1.5px dashed rgba(0,245,212,0.2);
+    border-radius: 16px;
+    padding: 12px;
+    transition: border-color 0.2s;
+}
+div[data-testid="stFileUploader"]:hover {
+    border-color: rgba(0,245,212,0.4);
+}
+
+/* ── Expanders ─────────────────────────────────────────────── */
+details {
+    background: rgba(8,15,35,0.7) !important;
+    border: 1px solid rgba(0,245,212,0.1) !important;
+    border-radius: 14px !important;
+    margin-bottom: 8px !important;
+    backdrop-filter: blur(5px) !important;
+}
+summary {
+    padding: 13px 18px !important;
+    color: #7dd3fc !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+}
+summary:hover { color: #00f5d4 !important; }
+
+/* ── Tabs ──────────────────────────────────────────────────── */
+div[data-testid="stTabs"] button {
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+div[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #00f5d4 !important;
+    border-bottom-color: #00f5d4 !important;
+}
+
+/* ── DataFrames ─────────────────────────────────────────────── */
+div[data-testid="stDataFrame"] {
+    border: 1px solid rgba(0,245,212,0.1);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.stDataFrame thead tr th {
+    background: rgba(0,245,212,0.08) !important;
+    color: #00f5d4 !important;
+    font-family: 'Syne', sans-serif !important;
+    font-size: 0.75rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: .08em !important;
+}
+
+/* ── Alerts ─────────────────────────────────────────────────── */
+div[data-testid="stAlert"] {
+    border-radius: 12px !important;
+    border: none !important;
+}
+
+/* ── Progress bar ───────────────────────────────────────────── */
+div[data-testid="stProgress"] > div > div {
+    background: linear-gradient(90deg, #00f5d4, #7209b7) !important;
+    border-radius: 4px !important;
+}
+div[data-testid="stProgress"] > div {
+    background: rgba(0,245,212,0.1) !important;
+    border-radius: 4px !important;
+}
+
+hr { border-color: rgba(0,245,212,0.08) !important; }
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+div[data-testid="stSpinner"] > div {
+    border-color: #00f5d4 !important;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #04070f; }
+::-webkit-scrollbar-thumb { background: rgba(0,245,212,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,245,212,0.5); }
+
+/* ── Success/Info overrides ──────────────────────────────────── */
+.stSuccess { background: rgba(6,214,160,0.08) !important; border-left-color: #06d6a0 !important; }
+.stInfo    { background: rgba(0,245,212,0.06) !important; border-left-color: #00f5d4 !important; }
+.stError   { background: rgba(247,37,133,0.08) !important; border-left-color: #f72585 !important; }
+.stWarning { background: rgba(255,214,10,0.08) !important; border-left-color: #ffd60a !important; }
+
+/* ── Select box ──────────────────────────────────────────────── */
+div[data-testid="stSelectbox"] > div > div {
+    background: rgba(8,15,35,0.8) !important;
+    border: 1px solid rgba(0,245,212,0.15) !important;
+    border-radius: 10px !important;
+    color: #c4d8ff !important;
+}
+
+/* ── Text input ──────────────────────────────────────────────── */
+div[data-testid="stTextInput"] input {
+    background: rgba(8,15,35,0.8) !important;
+    border: 1px solid rgba(0,245,212,0.15) !important;
+    border-radius: 10px !important;
+    color: #c4d8ff !important;
+}
+div[data-testid="stTextInput"] input:focus {
+    border-color: rgba(0,245,212,0.4) !important;
+    box-shadow: 0 0 0 3px rgba(0,245,212,0.08) !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("""<div style="text-align:center;padding:20px 0 16px;">
-        <div style="font-size:2rem;">🧠</div>
-        <div style="font-size:1rem;font-weight:800;color:#e2e8f0;">Quality Intelligence</div>
-        <div style="font-size:0.65rem;color:#334155;letter-spacing:.15em;text-transform:uppercase;margin-top:2px;">ENGINE V3.0</div>
+    st.markdown("""
+    <div style="text-align:center;padding:28px 0 20px;">
+        <div style="position:relative;display:inline-block;margin-bottom:14px;">
+            <div style="width:62px;height:62px;border-radius:18px;
+                background:linear-gradient(135deg,#00f5d4,#7209b7);
+                display:flex;align-items:center;justify-content:center;
+                margin:0 auto;font-size:1.8rem;
+                box-shadow:0 8px 24px rgba(0,245,212,0.3);">🧠</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;
+            background:linear-gradient(135deg,#00f5d4,#b14cf0);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            background-clip:text;letter-spacing:-.01em;">Quality Intelligence</div>
+        <div style="font-size:0.6rem;color:#1e3a5f;letter-spacing:.2em;
+            text-transform:uppercase;margin-top:3px;font-family:'JetBrains Mono',monospace;">ENGINE V3.0</div>
     </div>""", unsafe_allow_html=True)
     st.divider()
     PAGE = st.radio("nav", ["🏠  Dashboard", "📂  Audit Sheet Analysis",
@@ -75,16 +428,29 @@ with st.sidebar:
                              "🤖  Voicebot Audit"],
                     label_visibility="collapsed")
     st.divider()
-    st.markdown("""<div style="font-size:0.7rem;color:#1e3a5f;padding:6px 4px;line-height:1.9;">
-        <div style="color:#334155;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">Setup</div>
-        Create <code style="background:#0f1e3d;padding:1px 5px;border-radius:3px;color:#60a5fa;">.env</code> file with:<br>
-        <code style="background:#0f1e3d;padding:2px 6px;border-radius:3px;color:#60a5fa;font-size:0.67rem;">ANTHROPIC_API_KEY=sk-ant-...</code>
+    st.markdown("""
+    <div style="margin:4px 6px;padding:14px 16px;
+        background:rgba(0,245,212,0.04);border:1px solid rgba(0,245,212,0.1);
+        border-radius:12px;font-size:0.72rem;line-height:1.9;">
+        <div style="color:#00f5d4;font-weight:700;letter-spacing:.1em;
+            text-transform:uppercase;margin-bottom:7px;font-family:'Syne',sans-serif;font-size:0.65rem;">⚙️ Setup</div>
+        <div style="color:#3d5070;">Create <code style="background:rgba(0,245,212,0.1);
+            padding:1px 6px;border-radius:4px;color:#00f5d4;font-family:'JetBrains Mono',monospace;">.env</code> file:</div>
+        <code style="background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;
+            color:#00f5d4;font-size:0.65rem;font-family:'JetBrains Mono',monospace;
+            display:block;margin-top:6px;">ANTHROPIC_API_KEY=sk-ant-...</code>
     </div>""", unsafe_allow_html=True)
 
 def mcard(data):
     for col, val, ac, lbl in data:
         with col:
-            st.markdown(f'<div class="qie-card" style="--ac:{ac};"><div class="v">{val}</div><div class="l">{lbl}</div></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="qie-card" style="--ac:{ac};">' +
+                f'<div class="v">{val}</div>' +
+                f'<div class="l">{lbl}</div>' +
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
 def sec(label, color=""):
     st.markdown(f'<div class="sec {color}">{label}</div>', unsafe_allow_html=True)
@@ -109,11 +475,27 @@ def ai_section(full, keyword):
     content = "\n".join(buf).strip()
     ai_box(content if content else full)
 
+def load_file(up) -> pd.DataFrame | None:
+    """Universal loader — handles CSV, Excel, PDF, Word, TXT."""
+    if up is None:
+        return None
+    up.seek(0)
+    df, ftype, msg = parse_file(up)
+    label = get_file_type_label(ftype)
+    if df is not None:
+        st.markdown(
+            f"<div style='background:#0a1a0a;border:1px solid #14532d;border-radius:8px;"
+            f"padding:8px 14px;margin:6px 0;font-size:0.82rem;color:#4ade80;'>"
+            f"✅ {label} — {msg}</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.error(f"{label} — {msg}")
+    return df
+
+# Keep load_csv as alias for backwards compat
 def load_csv(up):
-    try:
-        return pd.read_csv(up)
-    except Exception as e:
-        st.error(f"Could not read file: {e}"); return None
+    return load_file(up)
 
 def make_zip(files):
     buf = io.BytesIO()
@@ -122,37 +504,96 @@ def make_zip(files):
             z.writestr(name, content)
     return buf.getvalue()
 
-# ── PAGE: DASHBOARD ───────────────────────────────────────────────────────────
+# ── PAGE: DASHBOARD ──────────────────────────────────────────
 def page_dashboard():
-    st.markdown("""<div style="padding:28px 0 12px;text-align:center;">
-        <h1 style="font-size:2.4rem;font-weight:800;color:#e2e8f0;letter-spacing:-.02em;margin-bottom:8px;">Quality Intelligence Engine</h1>
-        <p style="font-size:1rem;color:#475569;max-width:560px;margin:0 auto;">
-            Upload your audit sheet or call transcripts. The engine does the rest.</p>
+    # Hero
+    st.markdown("""
+    <div style="padding:48px 0 32px;text-align:center;position:relative;">
+        <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);
+            width:600px;height:300px;
+            background:radial-gradient(ellipse,rgba(0,245,212,0.06) 0%,transparent 70%);
+            pointer-events:none;"></div>
+        <div style="display:inline-block;background:linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.1));
+            border:1px solid rgba(0,245,212,0.2);border-radius:50px;
+            padding:5px 16px;font-size:0.7rem;color:#00f5d4;font-weight:700;
+            letter-spacing:.12em;text-transform:uppercase;margin-bottom:20px;
+            font-family:'JetBrains Mono',monospace;">✦ AI-Powered QA Analytics</div>
+        <h1 style="font-family:'Syne',sans-serif;font-size:3rem;font-weight:800;
+            background:linear-gradient(135deg,#ffffff 0%,#00f5d4 40%,#b14cf0 80%,#f72585 100%);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            background-clip:text;letter-spacing:-0.03em;line-height:1.1;margin-bottom:16px;">
+            Quality Intelligence<br>Engine
+        </h1>
+        <p style="font-size:1.05rem;color:#4a6080;max-width:480px;margin:0 auto 32px;line-height:1.6;">
+            Upload your audit data. The engine detects, analyses,<br>and delivers AI-powered insights instantly.
+        </p>
     </div>""", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
+
+    # Feature cards
+    c1, c2 = st.columns(2, gap="large")
     with c1:
-        st.markdown("""<div class="qie-card" style="--ac:#3b82f6;text-align:left;padding:26px;">
-            <div style="font-size:1.8rem;margin-bottom:10px;">📂</div>
-            <div style="font-size:1rem;font-weight:700;color:#93c5fd;margin-bottom:8px;">Audit Sheet Analysis</div>
-            <div style="font-size:0.83rem;color:#c8d5ea;line-height:2;">
-                ✅ Auto-detects file type<br>✅ TNI + Calibration + ATA<br>
-                ✅ Charts and trend analysis<br>✅ AI coaching reports<br>✅ Batch agent scorecards</div>
+        st.markdown("""
+        <div class="feat-card" style="background:linear-gradient(135deg,rgba(0,245,212,0.08) 0%,rgba(8,145,178,0.06) 50%,rgba(114,9,183,0.08) 100%);
+            border:1px solid rgba(0,245,212,0.15);">
+            <span class="icon">📂</span>
+            <div class="title" style="color:#00f5d4;">Audit Sheet Analysis</div>
+            <div class="desc" style="color:#4a6080;">Upload once. Auto-detects your data format and runs all analyses simultaneously.</div>
+            <div class="list" style="color:#c4d8ff;">
+                ✦ &nbsp;Training Needs Identification<br>
+                ✦ &nbsp;Calibration & Inter-rater Analysis<br>
+                ✦ &nbsp;Audit the Auditor (ATA)<br>
+                ✦ &nbsp;Agent Performance Scorecards<br>
+                ✦ &nbsp;AI-generated coaching reports
+            </div>
         </div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown("""<div class="qie-card" style="--ac:#ef4444;text-align:left;padding:26px;">
-            <div style="font-size:1.8rem;margin-bottom:10px;">🚨</div>
-            <div style="font-size:1rem;font-weight:700;color:#fca5a5;margin-bottom:8px;">Transcript Scanner</div>
-            <div style="font-size:0.83rem;color:#c8d5ea;line-height:2;">
-                ✅ 100+ violation patterns<br>✅ HIGH / MEDIUM / LOW severity<br>
-                ✅ Agent risk profiles<br>✅ AI compliance report<br>✅ Download reports</div>
+        st.markdown("""
+        <div class="feat-card" style="background:linear-gradient(135deg,rgba(247,37,133,0.08) 0%,rgba(114,9,183,0.06) 50%,rgba(255,214,10,0.05) 100%);
+            border:1px solid rgba(247,37,133,0.15);">
+            <span class="icon">🚨</span>
+            <div class="title" style="color:#f72585;">Transcript + Voicebot Scanner</div>
+            <div class="desc" style="color:#4a6080;">Drop transcripts or voicebot audit dumps — full compliance and performance analysis.</div>
+            <div class="list" style="color:#c4d8ff;">
+                ✦ &nbsp;100+ violation pattern library<br>
+                ✦ &nbsp;HIGH / MEDIUM / LOW severity<br>
+                ✦ &nbsp;Voicebot containment & intent audit<br>
+                ✦ &nbsp;Agent risk profiles<br>
+                ✦ &nbsp;AI compliance + optimisation report
+            </div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    sec("📋 CSV Format Guide")
-    t1, t2, t3 = st.tabs(["TNI / Agent Audit", "Calibration", "Audit the Auditor (ATA)"])
+
+    # Stats row
+    st.markdown("""
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:8px 0 32px;">
+        <div style="text-align:center;padding:20px;background:rgba(0,245,212,0.04);
+            border:1px solid rgba(0,245,212,0.08);border-radius:16px;">
+            <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#00f5d4;">6</div>
+            <div style="font-size:0.7rem;color:#3d5070;text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">Analysis Modules</div>
+        </div>
+        <div style="text-align:center;padding:20px;background:rgba(247,37,133,0.04);
+            border:1px solid rgba(247,37,133,0.08);border-radius:16px;">
+            <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#f72585;">100+</div>
+            <div style="font-size:0.7rem;color:#3d5070;text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">Violation Patterns</div>
+        </div>
+        <div style="text-align:center;padding:20px;background:rgba(177,76,240,0.04);
+            border:1px solid rgba(177,76,240,0.08);border-radius:16px;">
+            <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#b14cf0;">5</div>
+            <div style="font-size:0.7rem;color:#3d5070;text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">File Formats</div>
+        </div>
+        <div style="text-align:center;padding:20px;background:rgba(255,214,10,0.04);
+            border:1px solid rgba(255,214,10,0.08);border-radius:16px;">
+            <div style="font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:#ffd60a;">AI</div>
+            <div style="font-size:0.7rem;color:#3d5070;text-transform:uppercase;letter-spacing:.1em;margin-top:4px;">Claude Powered</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    # Format guide
+    st.markdown('<div class="sec">📋 Accepted File Formats & CSV Structure</div>', unsafe_allow_html=True)
+    t1, t2, t3, t4 = st.tabs(["📊 TNI / Audit", "⚖️ Calibration", "🔍 ATA", "🤖 Voicebot"])
     with t1:
-        st.caption("Needs: agent name + date + score columns. Column names are auto-detected.")
+        st.caption("Needs: agent name + date + score columns. Column names auto-detected.")
         st.dataframe(pd.DataFrame({"agent_name":["Akshata","Sunil"],"audit_date":["2025-01-10","2025-01-11"],"greeting":[65,80],"empathy":[60,75],"closing":[70,85]}), use_container_width=True, hide_index=True)
     with t2:
         st.caption("Needs: auditor name + call_id + score columns.")
@@ -160,15 +601,19 @@ def page_dashboard():
     with t3:
         st.caption("Needs: auditor scores + master_ columns for same parameters.")
         st.dataframe(pd.DataFrame({"auditor_name":["QA_Priya","QA_Rahul"],"greeting":[75,55],"master_greeting":[78,78],"empathy":[80,60],"master_empathy":[82,82]}), use_container_width=True, hide_index=True)
+    with t4:
+        st.caption("Needs: bot_name + interaction_id + any performance columns.")
+        st.dataframe(pd.DataFrame({"bot_name":["SalesBot"],"interaction_id":["I001"],"containment_result":["yes"],"intent_detected":["check_balance"],"intent_expected":["check_balance"],"csat_score":[4.5]}), use_container_width=True, hide_index=True)
+
 
 # ── PAGE: AUDIT ANALYSIS ──────────────────────────────────────────────────────
 def page_audit_analysis():
-    st.markdown("<h2 style='color:#e2e8f0;margin-bottom:2px;'>📂 Audit Sheet Analysis</h2><p style='color:#475569;font-size:0.9rem;'>Upload once — engine auto-detects and runs all analyses</p>", unsafe_allow_html=True)
-    uploaded = st.file_uploader("Upload your audit CSV", type=["csv"], key="audit_up")
+    st.markdown("<h2 style='font-family:Syne,sans-serif;font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,#00f5d4,#0891b2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:2px;'>📂 Audit Sheet Analysis</h2><p style='color:#3d5070;font-size:0.88rem;margin-top:0;'>Upload once — engine auto-detects and runs all analyses automatically</p>", unsafe_allow_html=True)
+    uploaded = st.file_uploader("Upload audit file (CSV, Excel, PDF, Word)", type=["csv","xlsx","xls","pdf","docx","txt"], key="audit_up")
     if not uploaded:
         st.info("Upload your audit sheet. The engine auto-detects: TNI, Calibration, or ATA data.")
         return
-    raw_df = load_csv(uploaded)
+    raw_df = load_file(uploaded)
     if raw_df is None: return
     df, file_type, warnings, info = auto_prepare(raw_df)
     type_map = {"tni":("📊 TNI / Agent Audit Data","#3b82f6"),"calibration":("⚖️ Calibration Data","#8b5cf6"),"ata":("🔍 ATA Data","#10b981"),"unknown":("❓ Unknown","#f59e0b")}
@@ -289,7 +734,7 @@ def page_audit_analysis():
 
 # ── PAGE: TRANSCRIPT SCANNER ──────────────────────────────────────────────────
 def page_transcripts():
-    st.markdown("<h2 style='color:#e2e8f0;margin-bottom:2px;'>🚨 Transcript Scanner</h2><p style='color:#475569;font-size:0.9rem;'>Upload transcripts — auto-detects violations and generates compliance report</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-family:Syne,sans-serif;font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,#f72585,#ffd60a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:2px;'>🚨 Transcript Scanner</h2><p style='color:#3d5070;font-size:0.88rem;margin-top:0;'>Upload call transcripts — auto-detects violations, generates compliance report</p>", unsafe_allow_html=True)
     with st.sidebar:
         st.markdown("---")
         st.markdown("**⚙️ Custom Rules**")
@@ -363,11 +808,11 @@ def page_transcripts():
 
 # ── PAGE: AGENT SCORECARDS ────────────────────────────────────────────────────
 def page_scorecards():
-    st.markdown("<h2 style='color:#e2e8f0;margin-bottom:2px;'>🎯 Agent Scorecards</h2><p style='color:#475569;font-size:0.9rem;'>Individual AI performance reports + batch download</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='font-family:Syne,sans-serif;font-size:1.8rem;font-weight:800;background:linear-gradient(135deg,#b14cf0,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:2px;'>🎯 Agent Scorecards</h2><p style='color:#3d5070;font-size:0.88rem;margin-top:0;'>Individual AI-powered performance reports — download as PDF or batch ZIP</p>", unsafe_allow_html=True)
     df = st.session_state.get("audit_df", None)
-    uploaded = st.file_uploader("Upload audit CSV (or reuse Audit Sheet Analysis data)", type=["csv"], key="sc_up")
+    uploaded = st.file_uploader("Upload audit file (CSV, Excel, PDF, Word) or reuse Audit Sheet data", type=["csv","xlsx","xls","pdf","docx","txt"], key="sc_up")
     if uploaded:
-        raw = load_csv(uploaded)
+        raw = load_file(uploaded)
         if raw is not None:
             df, _, _, _ = auto_prepare(raw)
     if df is None:
@@ -482,12 +927,12 @@ def page_voicebot():
         })
         st.dataframe(eg, use_container_width=True, hide_index=True)
 
-    uploaded = st.file_uploader("Upload Voicebot Audit CSV", type=["csv"], key="vb_up")
+    uploaded = st.file_uploader("Upload Voicebot Audit file (CSV, Excel, PDF, Word)", type=["csv","xlsx","xls","pdf","docx","txt"], key="vb_up")
     if not uploaded:
         st.info("Upload your voicebot audit dump CSV to begin.")
         return
 
-    raw_df = load_csv(uploaded)
+    raw_df = load_file(uploaded)
     if raw_df is None:
         return
 
